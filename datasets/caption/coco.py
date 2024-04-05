@@ -39,14 +39,19 @@ class DictionaryCollator:
         if self.img_field.use_hdf5_feat:
             samples = {}
             if self.img_field.use_gri_feat:
-                samples['gri_feat'] = torch.stack([im['gri_feat'] for im in imgs]).to(self.device)
-                samples['gri_mask'] = torch.stack([im['gri_mask'] for im in imgs]).to(self.device)
+                samples['gri_feat'] = torch.stack(
+                    [im['gri_feat'] for im in imgs]).to(self.device)
+                samples['gri_mask'] = torch.stack(
+                    [im['gri_mask'] for im in imgs]).to(self.device)
             if self.img_field.use_reg_feat:
-                samples['reg_feat'] = torch.stack([im['reg_feat'] for im in imgs]).to(self.device)
-                samples['reg_mask'] = torch.stack([im['reg_mask'] for im in imgs]).to(self.device)
+                samples['reg_feat'] = torch.stack(
+                    [im['reg_feat'] for im in imgs]).to(self.device)
+                samples['reg_mask'] = torch.stack(
+                    [im['reg_mask'] for im in imgs]).to(self.device)
             outputs['samples'] = samples
         else:
-            outputs['samples'] = nested_tensor_from_tensor_list(imgs).to(self.device)
+            outputs['samples'] = nested_tensor_from_tensor_list(
+                imgs).to(self.device)
 
         outputs['captions'] = captions
         outputs['image_id'] = image_ids
@@ -55,7 +60,7 @@ class DictionaryCollator:
 
 class PairedCollator(DictionaryCollator):
 
-    def __init__(self, img_field, device='cpu', max_len=54, pad_idx=1, bos_idx=2, eos_idx=3):
+    def __init__(self, img_field, device='cpu', max_len=128, pad_idx=1, bos_idx=2, eos_idx=3):
         super().__init__(img_field, device)
         self.max_len = max_len
         self.pad_idx = pad_idx
@@ -71,7 +76,8 @@ class PairedCollator(DictionaryCollator):
 
         padded = []
         for c in captions:
-            caption = [self.bos_idx] + c + [self.eos_idx] + [self.pad_idx] * (max_len - len(c))
+            caption = [self.bos_idx] + c + [self.eos_idx] + \
+                [self.pad_idx] * (max_len - len(c))
             padded.append(caption)
 
         padded = [torch.Tensor(caption).long() for caption in padded]
@@ -111,7 +117,8 @@ class TestCollator:
         image_ids = [item[1] for item in batch]
 
         outputs = {}
-        outputs['samples'] = nested_tensor_from_tensor_list(imgs).to(self.device)
+        outputs['samples'] = nested_tensor_from_tensor_list(
+            imgs).to(self.device)
         outputs['image_id'] = image_ids
         return outputs
 
@@ -132,7 +139,8 @@ class TestDataset:
         self.root = root
         self.transform = transform
         if self.transform is None:
-            self.transform = Compose([MinMaxResize((384, 640)), ToTensor(), normalize()])
+            self.transform = Compose(
+                [MinMaxResize((384, 640)), ToTensor(), normalize()])
 
     def __getitem__(self, idx):
         item = self.annotations[idx]
@@ -213,12 +221,14 @@ class COCO(CPairedDataset):
 
         if ann_root is not None:
             ids = {}
-            ids['train'] = np.load(os.path.join(ann_root, 'coco_train_ids.npy'))
+            ids['train'] = np.load(os.path.join(
+                ann_root, 'coco_train_ids.npy'))
             ids['valid'] = np.load(os.path.join(ann_root, 'coco_dev_ids.npy'))
             if cut_validation:
                 ids['valid'] = ids['valid'][:5000]
             ids['test'] = np.load(os.path.join(ann_root, 'coco_test_ids.npy'))
-            ids['trainrestval'] = (ids['train'], np.load(os.path.join(ann_root, 'coco_restval_ids.npy')))
+            ids['trainrestval'] = (ids['train'], np.load(
+                os.path.join(ann_root, 'coco_restval_ids.npy')))
 
             if use_restval:
                 roots['train'] = roots['trainrestval']
@@ -226,7 +236,8 @@ class COCO(CPairedDataset):
         else:
             ids = None
 
-        self.train_examples, self.valid_examples, self.test_examples = self.get_samples(roots, ids)
+        self.train_examples, self.valid_examples, self.test_examples = self.get_samples(
+            roots, ids)
 
     def split_examples(self):
         return {
@@ -236,9 +247,12 @@ class COCO(CPairedDataset):
         }
 
     def splits(self):
-        train_split = CPairedDataset(self.train_examples, self.image_field, self.text_field, overfit=self.overfit)
-        valid_split = CPairedDataset(self.valid_examples, self.image_field, self.text_field, overfit=self.overfit)
-        test_split = CPairedDataset(self.test_examples, self.image_field, self.text_field, overfit=self.overfit)
+        train_split = CPairedDataset(
+            self.train_examples, self.image_field, self.text_field, overfit=self.overfit)
+        valid_split = CPairedDataset(
+            self.valid_examples, self.image_field, self.text_field, overfit=self.overfit)
+        test_split = CPairedDataset(
+            self.test_examples, self.image_field, self.text_field, overfit=self.overfit)
         return train_split, valid_split, test_split
 
     def get_samples(self, roots, ids_dataset=None):
@@ -248,10 +262,12 @@ class COCO(CPairedDataset):
         heights = []
         widths = []
 
-        splits = ['valid', 'test'] if self.overfit else ['train', 'valid', 'test']
+        splits = ['valid', 'test'] if self.overfit else [
+            'train', 'valid', 'test']
         for split in splits:
             if isinstance(roots[split]['cap'], tuple):
-                coco_dataset = (pyCOCO(roots[split]['cap'][0]), pyCOCO(roots[split]['cap'][1]))
+                coco_dataset = (pyCOCO(roots[split]['cap'][0]), pyCOCO(
+                    roots[split]['cap'][1]))
                 root = roots[split]['img']
             else:
                 coco_dataset = (pyCOCO(roots[split]['cap']),)
@@ -336,7 +352,8 @@ def build_coco_dataloaders(config=None, mode='freezing', device='cpu'):
         'test_dict': DictionaryCollator(valid_field, device=device),
     }
 
-    batch_size = config.optimizer.batch_size * 4 if mode == 'freezing' else config.optimizer.batch_size
+    batch_size = config.optimizer.batch_size * \
+        4 if mode == 'freezing' else config.optimizer.batch_size
     sc_batch_size = config.optimizer.batch_size if mode == 'freezing' else config.optimizer.batch_size // 4
 
     dataloaders = {}
@@ -362,8 +379,10 @@ def build_coco_dataloaders(config=None, mode='freezing', device='cpu'):
         'valid': DistributedSampler(datasets['valid'], shuffle=False),
         'train_dict': DistributedSampler(datasets['train_dict'], shuffle=True)
     }
-    batch_train_sampler = BatchSampler(samplers['train'], batch_size, drop_last=True)
-    batch_train_dict_sampler = BatchSampler(samplers['train_dict'], max(2, sc_batch_size), drop_last=True)
+    batch_train_sampler = BatchSampler(
+        samplers['train'], batch_size, drop_last=True)
+    batch_train_dict_sampler = BatchSampler(
+        samplers['train_dict'], max(2, sc_batch_size), drop_last=True)
 
     dataloaders['train'] = DataLoader(
         datasets['train'],
@@ -392,14 +411,16 @@ def build_test_dataloaders(config=None, device='cpu', from_idx=0, to_idx=-1):
         'test':
             TestDataset(
                 root=os.path.join(os.environ['DATA_ROOT'], 'test2014'),
-                anno_file=os.path.join(os.environ['DATA_ROOT'], 'annotations/image_info_test2014.json'),
+                anno_file=os.path.join(
+                    os.environ['DATA_ROOT'], 'annotations/image_info_test2014.json'),
                 from_idx=from_idx,
                 to_idx=to_idx,
             ),
         'valid':
             TestDataset(
                 root=os.path.join(os.environ['DATA_ROOT'], 'val2014'),
-                anno_file=os.path.join(os.environ['DATA_ROOT'], 'annotations/captions_val2014.json'),
+                anno_file=os.path.join(
+                    os.environ['DATA_ROOT'], 'annotations/captions_val2014.json'),
                 from_idx=from_idx,
                 to_idx=to_idx,
             ),

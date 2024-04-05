@@ -14,25 +14,18 @@ from tools.extract_features import extract_vis_features
 from utils.cap_scheduler import CosineLRScheduler
 
 import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
-from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from engine.caption_engine import *
 
 
 def main(gpu, config):
-    # dist init
-    torch.backends.cudnn.enabled = False
-    rank = config.exp.rank * config.exp.ngpus_per_node + gpu
-    dist.init_process_group('nccl', 'env://', rank=rank, world_size=config.exp.world_size)
 
     torch.manual_seed(config.exp.seed)
     np.random.seed(config.exp.seed)
     random.seed(config.exp.seed)
 
-    device = torch.device(f"cuda:{gpu}")
-    torch.cuda.set_device(gpu)
+    device = torch.device(f"cuda:0")
+    torch.cuda.set_device(device)
 
     # extract features
     detector = build_detector(config).to(device)
@@ -58,19 +51,20 @@ def main(gpu, config):
         else:
             extract_vis_features(detector, config, device, rank)
 
-    model = DDP(model, device_ids=[gpu], find_unused_parameters=True, broadcast_buffers=False)
+    #model = DDP(model, device_ids=[gpu], find_unused_parameters=True, broadcast_buffers=False)
     optimizers = build_optimizers(model, config, mode='xe')
+    rank = 0
 
     # tensorboard:
-    writer = SummaryWriter(log_dir='tensorboard') if rank == 0 or rank == 1 else None
+    writer = SummaryWriter(log_dir='tensorboard')
 
     # train with freezing xe
     if start_epoch < config.optimizer.freezing_xe_epochs \
         and not getattr(config.optimizer, 'freeze_backbone', False):
-        model.module.cached_features = True
+        model.cached_features = True
         dataloaders, samplers = build_coco_dataloaders(config, mode='freezing', device=device)
     else:
-        model.module.cached_features = False
+        model.cached_features = False
         dataloaders, samplers = build_coco_dataloaders(config, mode='finetune', device=device)
 
     text_field = TextField(vocab_path=config.dataset.vocab_path)
@@ -201,16 +195,14 @@ def main(gpu, config):
                     scheduler=scheduler,
                 )
 
-        torch.distributed.barrier()
-
 
 @hydra.main(config_path="configs/caption", config_name="coco_config")
 def run_main(config: DictConfig) -> None:
-    mp.spawn(main, nprocs=config.exp.ngpus_per_node, args=(config,))
+    main("cuda:0", config)
 
 
 if __name__ == "__main__":
     # os.environ["DATA_ROOT"] = "/home/quang/datasets/coco_caption"
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "6688"
+    os.environ["MASTER_PORT"] = "26688"
     run_main()
